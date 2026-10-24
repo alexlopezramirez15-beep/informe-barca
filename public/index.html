@@ -425,7 +425,7 @@ document.querySelectorAll(".trash.arm").forEach(x=>{x.classList.remove("arm");x.
 b.dataset.icon=b.innerHTML;b.classList.add("arm");b.textContent="Delete?";
 clearTimeout(b._t);b._t=setTimeout(()=>{if(b.isConnected){b.classList.remove("arm");b.innerHTML=b.dataset.icon}},3500);return;
 }
-try{await col.doc(b.dataset.del).delete();if(local)renderList();toast("Report deleted")}catch(e){toast("Could not delete")}
+try{await col.doc(b.dataset.del).delete();renderList();toast("Report deleted")}catch(e){toast("Could not delete")}
 });
 }
 function fmtDate(d){const[y,m,dd]=d.split("-");return `${dd}/${m}/${y}`}
@@ -578,12 +578,37 @@ toast("PDF downloaded");
 $("pdfBtn").disabled=false;
 }
 let tt;function toast(m){const t=$("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2600)}
-const ACCESS="1994";
-function unlocked(){try{return localStorage.getItem("ba_access")===ACCESS}catch(e){return false}}
-$("splash").onclick=()=>{const s=$("splash");if(!unlocked()){$("gate").hidden=false;setTimeout(()=>$("gateCode").focus(),50)}s.classList.add("out");setTimeout(()=>s.hidden=true,matchMedia("(prefers-reduced-motion: reduce)").matches?0:350)};
-$("gateForm").onsubmit=e=>{e.preventDefault();const v=$("gateCode").value.trim();
-if(v===ACCESS){try{localStorage.setItem("ba_access",ACCESS)}catch(_){}$("gate").hidden=true;$("gateErr").textContent=""}
-else{$("gateErr").textContent="Wrong code. Try again.";$("gateCode").value="";const f=$("gateForm");f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake")}};
+let authed=false;const API="/api/reports";
+function accessCode(){try{return localStorage.getItem("ba_code")||""}catch(e){return ""}}
+function showGate(){if($("splash").hidden||$("splash").classList.contains("out")){$("gate").hidden=false;setTimeout(()=>$("gateCode").focus(),50)}}
+async function api(method,path="",body){
+const r=await fetch(API+path,{method,headers:{"x-access-code":accessCode(),"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
+if(r.status===401){authed=false;showGate();throw{code:"unauthorized"}}
+if(!r.ok)throw{code:"http_"+r.status};return r.json();
+}
+const newId=()=>"r"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+function remoteCol(){return{doc:(id)=>{id=id||newId();return{id,
+async set(b){await api("PUT","/"+encodeURIComponent(id),b);const i=reports.findIndex(r=>r.id===id);const r={...b,id};i>=0?reports[i]=r:reports.push(r)},
+async delete(){await api("DELETE","/"+encodeURIComponent(id));reports=reports.filter(r=>r.id!==id)}}}}}
+async function migrateLocal(){
+let old=[];try{old=JSON.parse(localStorage.getItem("ba_reports")||"[]")}catch(e){}
+old=old.filter(r=>r&&r.id&&r.id!=="ejemplo"&&!reports.some(x=>x.id===r.id));
+for(const r of old){const b={...r};delete b.id;await api("PUT","/"+encodeURIComponent(r.id),b);reports.push(r)}
+try{localStorage.removeItem("ba_reports")}catch(e){}
+if(old.length)toast(`${old.length} report${old.length>1?"s":""} from this device moved into the app`);
+}
+async function loadRemote(){
+$("dbBanner").textContent="Loading reports…";$("dbBanner").hidden=false;
+try{reports=await api("GET");authed=true;try{await migrateLocal()}catch(e){}$("dbBanner").hidden=true;renderList();return true}
+catch(e){if(e.code==="unauthorized"){$("dbBanner").hidden=true}else{$("dbBanner").textContent="Could not load the reports. Check your connection and reload the page."}return false}
+}
+$("splash").onclick=()=>{const s=$("splash");s.classList.add("out");if(!authed)showGate();setTimeout(()=>s.hidden=true,matchMedia("(prefers-reduced-motion: reduce)").matches?0:350)};
+$("gateForm").onsubmit=async e=>{e.preventDefault();const v=$("gateCode").value.trim();if(!v)return;
+try{localStorage.setItem("ba_code",v)}catch(_){}
+$("gateErr").textContent="Checking…";
+const ok=await loadRemote();
+if(ok){$("gate").hidden=true;$("gateErr").textContent="";$("gateCode").value=""}
+else if(!authed){try{localStorage.removeItem("ba_code")}catch(_){}$("gateErr").textContent=$("dbBanner").hidden?"Wrong code. Try again.":"No connection. Try again.";$("gateCode").value="";const f=$("gateForm");f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake")}};
 $("pitch").onclick=e=>{if(!current)return;const cv=$("pitch"),b=cv.getBoundingClientRect(),m=0.06;
 const fx=(e.clientX-b.left)/b.width,fy=(e.clientY-b.top)/b.height;
 current.pitch={x:Math.max(0,Math.min(100,(fx-m)/(1-2*m)*100)),y:Math.max(0,Math.min(100,(fy-m*cv.width/cv.height)/(1-2*m*cv.width/cv.height)*100))};refreshPitch()};
@@ -605,8 +630,8 @@ $("dbBanner").textContent=msg;$("dbBanner").hidden=false;renderList();
 }
 (async()=>{
 const c=window.claude;
-if(!c?.use){useLocal("Reports are saved on this device and browser.");return}
-col=memCol();renderList();
+if(!c?.use){col=remoteCol();renderList();if(accessCode())loadRemote();return}
+authed=true;col=memCol();renderList();
 c.use("downloads").then(d=>{downloads=d});
 const db=await c.use("db");
 if(!db){useLocal("No connection to the shared report store in this view. Reports are saved on this device only.");return}
