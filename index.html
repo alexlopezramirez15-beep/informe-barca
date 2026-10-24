@@ -356,9 +356,6 @@ else{c.fillStyle="#004D98";c.fillRect(x-R,y-R,2*R,2*R);c.fillStyle="#fff";c.font
 c.restore();
 }
 async function refreshPitch(){if(!current)return;const img=await loadImg(current.photo);if(current)drawPitch($("pitch"),current,img)}
-$("pitch").onclick=e=>{if(!current)return;const cv=$("pitch"),b=cv.getBoundingClientRect(),m=0.06;
-const fx=(e.clientX-b.left)/b.width,fy=(e.clientY-b.top)/b.height;
-current.pitch={x:Math.max(0,Math.min(100,(fx-m)/(1-2*m)*100)),y:Math.max(0,Math.min(100,(fy-m*cv.width/cv.height)/(1-2*m*cv.width/cv.height)*100))};refreshPitch()};
 const SAMPLE={id:"ejemplo",name:"Sample player (delete me)",year:2016,pos:"Right winger",pitch:{x:80,y:28},team:"Group A",coach:"",event:"Camp",date:"2026-10-24",scores:{pos0:4,pos1:3,pos2:3,dec0:4,dec1:4,dec2:3,tac0:4,tac1:2,pre0:3,pre1:3,pre2:2,att0:5,att1:4,att2:4,ant0:3,ant1:3,ant2:2,adv0:4,adv1:3},advs:{num:true,qual:true,dyn:true},comment:""};
 let reports=[], col=null, downloads=null, local=false, filter="all", current=null, saving=false;
 const $=id=>document.getElementById(id);
@@ -587,6 +584,9 @@ $("splash").onclick=()=>{const s=$("splash");if(!unlocked()){$("gate").hidden=fa
 $("gateForm").onsubmit=e=>{e.preventDefault();const v=$("gateCode").value.trim();
 if(v===ACCESS){try{localStorage.setItem("ba_access",ACCESS)}catch(_){}$("gate").hidden=true;$("gateErr").textContent=""}
 else{$("gateErr").textContent="Wrong code. Try again.";$("gateCode").value="";const f=$("gateForm");f.classList.remove("shake");void f.offsetWidth;f.classList.add("shake")}};
+$("pitch").onclick=e=>{if(!current)return;const cv=$("pitch"),b=cv.getBoundingClientRect(),m=0.06;
+const fx=(e.clientX-b.left)/b.width,fy=(e.clientY-b.top)/b.height;
+current.pitch={x:Math.max(0,Math.min(100,(fx-m)/(1-2*m)*100)),y:Math.max(0,Math.min(100,(fy-m*cv.width/cv.height)/(1-2*m*cv.width/cv.height)*100))};refreshPitch()};
 $("newBtn").onclick=()=>openEditor();
 $("backBtn").onclick=closeEditor;
 $("saveBtn").onclick=save;
