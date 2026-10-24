@@ -147,6 +147,8 @@ button{font:inherit;cursor:pointer}
 #gate .btn{width:100%;justify-content:center;padding:12px}
 @media (prefers-reduced-motion:no-preference){#gate form.shake{animation:shake .35s}}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.pitchbox{display:flex;justify-content:center}
+.pitchbox canvas{width:100%;max-width:300px;height:auto;aspect-ratio:408/600;border-radius:12px;cursor:crosshair;touch-action:manipulation}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:20;max-width:calc(100% - 32px)}
 .banner{background:var(--chip);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--muted);margin-top:12px}
 </style>
@@ -199,7 +201,7 @@ button{font:inherit;cursor:pointer}
 <div class="fields">
 <div class="field full"><label for="f_name">Player</label><input id="f_name" placeholder="Full name"></div>
 <div class="field"><label for="f_year">Year of birth</label><select id="f_year"></select></div>
-<div class="field"><label for="f_pos">Position</label><input id="f_pos" placeholder="e.g. Midfielder"></div>
+<div class="field"><label for="f_pos">Position</label><select id="f_pos"></select></div>
 <div class="field"><label for="f_team">Team / group</label><input id="f_team" placeholder="e.g. Group A"></div>
 <div class="field"><label for="f_date">Date</label><input id="f_date" type="date"></div>
 </div>
@@ -207,6 +209,10 @@ button{font:inherit;cursor:pointer}
 <div class="fields">
 <div class="field"><label for="f_coach">Coach</label><input id="f_coach"></div>
 <div class="field"><label for="f_event">Context</label><input id="f_event" placeholder="Camp, tournament, session…"></div>
+</div>
+<div class="block"><h3>Position on the pitch</h3>
+<p class="note" style="margin:0 0 10px">Pick a position from the list or tap the pitch to place the player exactly.</p>
+<div class="pitchbox"><canvas id="pitch" width="408" height="600" aria-label="Pitch: tap to place the player"></canvas></div>
 </div>
 <p class="scale" style="margin:14px 0 0"><span><b>1</b> Very low</span><span><b>2</b> Low</span><span><b>3</b> Adequate</span><span><b>4</b> High</span><span><b>5</b> Excellent</span></p>
 <div id="blocks"></div>
@@ -325,7 +331,35 @@ const g=genAssessment(current),el=$("genOut");
 if(!g){el.innerHTML=`<p class="empty-gen">Rate the criteria above and the assessment will be written here automatically.</p>`;return}
 el.innerHTML=`<div><h4>Strengths</h4><ul>${g.strengths.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div><div><h4>Next steps</h4><ul>${g.improve.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div><div><h4>Summary</h4><p>${esc(g.summary)}</p></div>`;
 }
-const SAMPLE={id:"ejemplo",name:"Sample player (delete me)",year:2016,pos:"Winger",team:"Group A",coach:"",event:"Camp",date:"2026-10-24",scores:{pos0:4,pos1:3,pos2:3,dec0:4,dec1:4,dec2:3,tac0:4,tac1:2,pre0:3,pre1:3,pre2:2,att0:5,att1:4,att2:4,ant0:3,ant1:3,ant2:2,adv0:4,adv1:3},advs:{num:true,qual:true,dyn:true},comment:""};
+const POS=[["Goalkeeper",50,92],["Right back",80,72],["Centre back",50,77],["Left back",20,72],["Defensive midfielder",50,62],["Central midfielder",50,50],["Attacking midfielder",50,37],["Right winger",80,28],["Left winger",20,28],["Striker",50,15]];
+const imgCache={};
+function loadImg(src){if(!src)return Promise.resolve(null);if(imgCache[src])return Promise.resolve(imgCache[src]);return new Promise(res=>{const i=new Image();i.onload=()=>{imgCache[src]=i;res(i)};i.onerror=()=>res(null);i.src=src})}
+function drawPitch(cv,r,img){
+const c=cv.getContext("2d"),W=cv.width,H=cv.height,m=W*0.06;
+for(let i=0;i<10;i++){c.fillStyle=i%2?"#2F8A57":"#2A7E4F";c.fillRect(0,i*H/10,W,H/10+1)}
+c.strokeStyle="rgba(255,255,255,.85)";c.lineWidth=W*0.008;
+const L=m,T=m,PW=W-2*m,PH=H-2*m;c.strokeRect(L,T,PW,PH);
+c.beginPath();c.moveTo(L,H/2);c.lineTo(L+PW,H/2);c.stroke();
+c.beginPath();c.arc(W/2,H/2,PW*0.14,0,7);c.stroke();
+c.fillStyle="rgba(255,255,255,.85)";c.beginPath();c.arc(W/2,H/2,W*0.012,0,7);c.fill();
+const bw=PW*0.58,bh=PH*0.16,gw=PW*0.28,gh=PH*0.06;
+[[T,1],[T+PH,-1]].forEach(([y0,d])=>{c.strokeRect(W/2-bw/2,d>0?y0:y0-bh,bw,bh);c.strokeRect(W/2-gw/2,d>0?y0:y0-gh,gw,gh);
+c.beginPath();c.arc(W/2,y0+d*bh,PW*0.1,d>0?0.15*Math.PI:1.15*Math.PI,d>0?0.85*Math.PI:1.85*Math.PI);c.stroke()});
+const p=r.pitch;if(!p)return;
+const x=L+PW*p.x/100,y=T+PH*p.y/100,R=W*0.085,ring=W*0.022;
+c.save();c.shadowColor="rgba(0,0,0,.35)";c.shadowBlur=W*0.03;c.beginPath();c.arc(x,y,R+ring,0,7);c.fillStyle="#004D98";c.fill();c.restore();
+c.beginPath();c.moveTo(x,y);c.arc(x,y,R+ring,-Math.PI/2,Math.PI/2);c.closePath();c.fillStyle="#A50044";c.fill();
+c.beginPath();c.arc(x,y,R+ring*0.25,0,7);c.fillStyle="#fff";c.fill();
+c.save();c.beginPath();c.arc(x,y,R,0,7);c.clip();
+if(img){const s=Math.max(2*R/img.width,2*R/img.height);c.drawImage(img,x-img.width*s/2,y-img.height*s/2.4,img.width*s,img.height*s)}
+else{c.fillStyle="#004D98";c.fillRect(x-R,y-R,2*R,2*R);c.fillStyle="#fff";c.font=`700 ${R*0.8}px "Barlow Condensed",sans-serif`;c.textAlign="center";c.textBaseline="middle";c.fillText(initials(r.name),x,y+1)}
+c.restore();
+}
+async function refreshPitch(){if(!current)return;const img=await loadImg(current.photo);if(current)drawPitch($("pitch"),current,img)}
+$("pitch").onclick=e=>{if(!current)return;const cv=$("pitch"),b=cv.getBoundingClientRect(),m=0.06;
+const fx=(e.clientX-b.left)/b.width,fy=(e.clientY-b.top)/b.height;
+current.pitch={x:Math.max(0,Math.min(100,(fx-m)/(1-2*m)*100)),y:Math.max(0,Math.min(100,(fy-m*cv.width/cv.height)/(1-2*m*cv.width/cv.height)*100))};refreshPitch()};
+const SAMPLE={id:"ejemplo",name:"Sample player (delete me)",year:2016,pos:"Right winger",pitch:{x:80,y:28},team:"Group A",coach:"",event:"Camp",date:"2026-10-24",scores:{pos0:4,pos1:3,pos2:3,dec0:4,dec1:4,dec2:3,tac0:4,tac1:2,pre0:3,pre1:3,pre2:2,att0:5,att1:4,att2:4,ant0:3,ant1:3,ant2:2,adv0:4,adv1:3},advs:{num:true,qual:true,dyn:true},comment:""};
 let reports=[], col=null, downloads=null, local=false, filter="all", current=null, saving=false;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -406,10 +440,11 @@ current.scores=current.scores||{};current.advs=current.advs||{};
 $("listView").hidden=true;$("editor").hidden=false;window.scrollTo(0,0);
 $("edTitle").textContent=r?(r.name||"Report"):"New report";
 $("f_year").innerHTML=`<optgroup label="11-a-side">${YEARS_F11.map(y=>`<option>${y}</option>`).join("")}</optgroup><optgroup label="7-a-side">${YEARS_F7.map(y=>`<option>${y}</option>`).join("")}</optgroup>`;
+$("f_pos").innerHTML=`<option value="">Choose a position…</option>`+POS.map(p=>`<option>${p[0]}</option>`).join("")+(current.pos&&!POS.some(p=>p[0]===current.pos)?`<option>${esc(current.pos)}</option>`:"");
 const map={f_name:"name",f_year:"year",f_pos:"pos",f_team:"team",f_date:"date",f_coach:"coach",f_event:"event",f_com:"comment"};
-for(const[id,k]of Object.entries(map)){const el=$(id);el.value=current[k]??"";el.oninput=()=>{current[k]=id==="f_year"?+el.value:el.value;if(id==="f_year")renderBlocks();update()}}
+for(const[id,k]of Object.entries(map)){const el=$(id);el.value=current[k]??"";el.oninput=()=>{current[k]=id==="f_year"?+el.value:el.value;if(id==="f_year")renderBlocks();if(id==="f_pos"){const p=POS.find(q=>q[0]===el.value);if(p)current.pitch={x:p[1],y:p[2]}}if(id==="f_pos"||id==="f_name")refreshPitch();update()}}
 $("delWrap").hidden=!current.id;$("delConfirm").hidden=true;$("delBtn").hidden=false;
-renderPhoto();renderBlocks();update();
+renderPhoto();renderBlocks();update();refreshPitch();
 }
 function renderPhoto(){
 const box=$("photoBox");box.querySelectorAll("img").forEach(i=>i.remove());
@@ -423,10 +458,10 @@ const rd=new FileReader();rd.onload=()=>{const img=new Image();img.onload=()=>{
 // crop 4:5 portrait, 360x450
 const W=360,H=450,cv=document.createElement("canvas");cv.width=W;cv.height=H;const ctx=cv.getContext("2d");
 const s=Math.max(W/img.width,H/img.height),w=img.width*s,h=img.height*s;
-ctx.drawImage(img,(W-w)/2,(H-h)/2.6,w,h);current.photo=cv.toDataURL("image/jpeg",0.78);renderPhoto();e.target.value="";
+ctx.drawImage(img,(W-w)/2,(H-h)/2.6,w,h);current.photo=cv.toDataURL("image/jpeg",0.78);renderPhoto();refreshPitch();e.target.value="";
 };img.onerror=()=>toast("That image could not be read. Try a JPG or PNG.");img.src=rd.result};rd.readAsDataURL(f);
 };
-$("photoDel").onclick=()=>{current.photo="";renderPhoto()};
+$("photoDel").onclick=()=>{current.photo="";renderPhoto();refreshPitch()};
 function renderBlocks(){
 const crit=CRITERIA[fmt(current.year)];
 $("blocks").innerHTML=crit.map((b,bi)=>`<div class="block"><h3><span class="n">${bi+1}</span>${b.t.toUpperCase()}<span class="sc" id="bs_${b.k}">–</span></h3>
@@ -487,16 +522,20 @@ doc.setFontSize(7.5);doc.setTextColor(...MU);doc.text("OVERALL AVERAGE / 5",191,
 const cv=document.createElement("canvas");cv.width=1000;cv.height=1000;
 try{await document.fonts.ready}catch(e){}
 drawRadar(cv,r,{print:true});
-doc.addImage(cv.toDataURL("image/png"),"PNG",14,67,92,92);
-let y=76;doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...INK);doc.text("SUMMARY BY AREA",112,y);y+=6;
+doc.addImage(cv.toDataURL("image/png"),"PNG",12,68,86,86);
+const pc=document.createElement("canvas");pc.width=408;pc.height=600;drawPitch(pc,r,await loadImg(r.photo));
+doc.setFont("helvetica","bold");doc.setFontSize(8.5);doc.setTextColor(...INK);doc.text("POSITION",100,73);
+doc.addImage(pc.toDataURL("image/jpeg",0.9),"JPEG",100,75,38,55.9);
+if(r.pos){doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...MU);doc.text(r.pos,119,134.5,{align:"center"})}
+let y=73;doc.setFont("helvetica","bold");doc.setFontSize(8.5);doc.setTextColor(...INK);doc.text("SUMMARY BY AREA",146,y);y+=6;
 crit.forEach((b,i)=>{
-doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(...INK);doc.text(`${i+1}. ${doc.splitTextToSize(b.t,70)[0]}`,112,y);
-doc.setFillColor(...LN);doc.rect(112,y+1.8,70,2.2,"F");
-if(bs[i]){doc.setFillColor(...B);doc.rect(112,y+1.8,70*bs[i]/5,2.2,"F")}
+doc.setFont("helvetica","normal");doc.setFontSize(8.8);doc.setTextColor(...INK);doc.text(`${i+1}. ${b.short}`,146,y);
+doc.setFillColor(...LN);doc.rect(146,y+1.8,40,2.2,"F");
+if(bs[i]){doc.setFillColor(...B);doc.rect(146,y+1.8,40*bs[i]/5,2.2,"F")}
 doc.setFont("helvetica","bold");doc.setTextColor(...B);doc.text(bs[i]?bs[i].toFixed(1):"–",196,y+3.8,{align:"right"});
-y+=11;
+y+=10;
 });
-y=165;
+y=163;
 const ensure=h=>{if(y+h>284){doc.addPage();bands();y=16}};
 doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...INK);doc.text("DETAILED ASSESSMENT",14,y);y+=4;
 crit.forEach((b,bi)=>{
